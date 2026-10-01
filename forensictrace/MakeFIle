@@ -1,0 +1,21 @@
+CC       = gcc
+CFLAGS   = -Wall -Wextra -std=gnu11 -O2 -g -D_GNU_SOURCE
+LDFLAGS  = -lcrypto
+TARGET   = forensictrace
+SRCS     = src/main.c src/collector.c src/normalizer.c \
+           src/correlator.c src/reconstructor.c src/integrity.c \
+           src/json_writer.c
+OBJS     = $(SRCS:.c=.o)
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+%.o: %.c src/forensictrace.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+clean:
+	rm -f $(OBJS) $(TARGET)
+
+.PHONY: all clean
