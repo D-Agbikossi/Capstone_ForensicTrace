@@ -1,3 +1,4 @@
+# ForensicTrace prototype — C11, -Wall -Wextra, links OpenSSL for SHA-256 sidecar.
 CC      := gcc
 CFLAGS  := -Wall -Wextra -std=c11 -O2 -D_GNU_SOURCE -I src
 LDFLAGS := -lcrypto

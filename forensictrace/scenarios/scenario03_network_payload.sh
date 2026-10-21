@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Scenario 3: Network fetch -> write payload -> execute
+set -e
 
-WORKDIR="$(mktemp -d)"
-trap 'rm -rf "$WORKDIR"' EXIT
-cd "$WORKDIR"
+WORKDIR="/tmp/ft_scenario03"
+rm -rf "$WORKDIR"; mkdir -p "$WORKDIR"; cd "$WORKDIR"
 
-echo 'echo "scenario03 run"' > served.txt
-
-python3 -m http.server 8766 >/dev/null 2>&1 &
-SERVER_PID=$!
-trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$WORKDIR"' EXIT
+echo "hello from server" > served.txt
+python3 -m http.server 8766 --directory "$WORKDIR" >/dev/null 2>&1 &
+SERVER=$!
 sleep 0.5
 
-curl -sf -o fetched.txt "http://127.0.0.1:8766/served.txt"
-cat fetched.txt > runme.sh
+curl -s "http://127.0.0.1:8766/served.txt" > fetched.txt
+
+cat > runme.sh <<'EOF'
+#!/bin/sh
+echo "network payload executed"
+EOF
 chmod +x runme.sh
 ./runme.sh
 
-kill "$SERVER_PID" 2>/dev/null || true
-wait "$SERVER_PID" 2>/dev/null || true
+kill $SERVER 2>/dev/null || true
+wait $SERVER 2>/dev/null || true

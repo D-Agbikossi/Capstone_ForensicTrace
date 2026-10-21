@@ -1,128 +1,93 @@
-#include "forensictrace.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "forensictrace.h"
 
-static void print_usage(FILE *fp)
-{
-    fprintf(fp,
-            "ForensicTrace — Linux syscall evidence collector (MVP)\n\n"
-            "Usage:\n"
-            "  forensictrace --config <A|B|C|D> --output <path> [--verbose|-v] -- <cmd> [args...]\n\n"
-            "Options:\n"
-            "  --config A|B|C|D   Evidence profile (A=process, B=+file, C=+network, D=all)\n"
-            "  --output PATH      Write experiment JSON to PATH (creates .sha256 sidecar)\n"
-            "  --verbose, -v      Log each captured event on stderr\n"
-            "  --help, -h         Show this help\n"
-            "  --                 End of options; remainder is the traced command\n\n"
-            "Example:\n"
-            "  forensictrace --config B --output /tmp/run.json -- /bin/ls /tmp\n");
+static void usage(void) {
+    fprintf(stderr,
+        "ForensicTrace - ptrace-based incident reconstruction prototype\n"
+        "\n"
+        "Usage: forensictrace --config <A|B|C|D> --output <file.json> [--verbose] -- <cmd> [args...]\n"
+        "\n"
+        "Configurations:\n"
+        "  A  Process events only\n"
+        "  B  Process + file events\n"
+        "  C  Process + file + network events\n"
+        "  D  All events (full syscall trace)\n"
+        "\n"
+        "Example:\n"
+        "  forensictrace --config B --output /tmp/run.json -- /bin/ls /tmp\n");
 }
 
-FTContext *ft_ctx_create(const char *config, const char *output, int verbose)
-{
-    FTContext *c;
+int main(int argc, char *argv[]) {
+    const char *config  = NULL;
+    const char *output  = NULL;
+    int         verbose = 0;
+    int         cmd_idx = -1;
 
-    c = calloc(1, sizeof(*c));
-    if (!c) {
-        return NULL;
-    }
-    snprintf(c->config, sizeof(c->config), "%s", config ? config : "A");
-    if (output) {
-        snprintf(c->output_path, sizeof(c->output_path), "%s", output);
-    }
-    c->verbose = verbose;
-    return c;
-}
-
-void ft_ctx_destroy(FTContext *c)
-{
-    free(c);
-}
-
-int main(int argc, char **argv)
-{
-    const char *config = NULL;
-    const char *output = NULL;
-    int verbose = 0;
-    int dashdash = -1;
-    int i;
-    FTContext *ctx;
-    char *const *target;
-
-    for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            print_usage(stderr);
-            return 0;
-        }
-        if (strcmp(argv[i], "--") == 0) {
-            dashdash = i;
-            break;
-        }
-        if (strcmp(argv[i], "--config") == 0) {
-            if (i + 1 >= argc) {
-                print_usage(stderr);
-                return 1;
-            }
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
+            usage(); return 0;
+        } else if (!strcmp(argv[i], "--config") && i + 1 < argc) {
             config = argv[++i];
-            continue;
-        }
-        if (strcmp(argv[i], "--output") == 0) {
-            if (i + 1 >= argc) {
-                print_usage(stderr);
-                return 1;
-            }
+        } else if (!strcmp(argv[i], "--output") && i + 1 < argc) {
             output = argv[++i];
-            continue;
-        }
-        if (strcmp(argv[i], "--verbose") == 0 || strcmp(argv[i], "-v") == 0) {
+        } else if (!strcmp(argv[i], "--verbose") || !strcmp(argv[i], "-v")) {
             verbose = 1;
-            continue;
+        } else if (!strcmp(argv[i], "--")) {
+            cmd_idx = i + 1; break;
+        } else {
+            fprintf(stderr, "Unknown option: %s\n", argv[i]);
+            usage(); return 1;
         }
-        fprintf(stderr, "Unknown option: %s\n", argv[i]);
-        print_usage(stderr);
+    }
+
+    if (!config || !output || cmd_idx < 0 || cmd_idx >= argc) {
+        usage(); return 1;
+    }
+    if (strcmp(config, "A") && strcmp(config, "B") &&
+        strcmp(config, "C") && strcmp(config, "D")) {
+        fprintf(stderr, "Invalid config '%s' (must be A, B, C, or D)\n", config);
         return 1;
     }
 
-    if (!config || !output || dashdash < 0 || dashdash + 1 >= argc) {
-        print_usage(stderr);
+    printf("[ForensicTrace]\n");
+    printf("  config  : %s\n", config);
+    printf("  output  : %s\n", output);
+    printf("  command : %s\n", argv[cmd_idx]);
+
+    FTContext *c = ft_ctx_create(config, output, verbose);
+    if (!c) { fprintf(stderr, "out of memory\n"); return 1; }
+
+    if (ft_collect(c, &argv[cmd_idx]) < 0) {
+        fprintf(stderr, "collection failed\n");
+        ft_ctx_destroy(c);
         return 1;
     }
 
-    if (strcmp(config, "A") != 0 && strcmp(config, "B") != 0 &&
-        strcmp(config, "C") != 0 && strcmp(config, "D") != 0) {
-        fprintf(stderr, "Invalid config: %s (use A, B, C, or D)\n", config);
+    ft_normalize(c);
+    ft_correlate(c);
+    ft_reconstruct(c);
+
+    if (ft_write_json(c) != 0) {
+        fprintf(stderr, "[ForensicTrace] failed to write experiment JSON\n");
+        ft_ctx_destroy(c);
         return 1;
     }
 
-    target = &argv[dashdash + 1];
-
-    ctx = ft_ctx_create(config, output, verbose);
-    if (!ctx) {
-        fprintf(stderr, "Out of memory\n");
+    if (ft_integrity_write(c) != 0) {
+        fprintf(stderr, "[ForensicTrace] failed to write integrity sidecar\n");
+        ft_ctx_destroy(c);
         return 1;
     }
 
-    fprintf(stderr, "[ForensicTrace]\n");
-    fprintf(stderr, "  config  : %s\n", config);
-    fprintf(stderr, "  output  : %s\n", output);
-    fprintf(stderr, "  command : %s\n", target[0]);
-
-    if (ft_collect(ctx, target) != 0) {
-        ft_ctx_destroy(ctx);
-        return 1;
+    printf("\n[ForensicTrace] %d events written to %s (%ld bytes)\n",
+           c->count, output, c->storage_bytes);
+    if (c->truncated) {
+        fprintf(stderr,
+                "[ForensicTrace] note: trace was truncated (see truncated in JSON)\n");
     }
 
-    ft_normalize(ctx);
-    ft_correlate(ctx);
-    ft_reconstruct(ctx);
-    ft_write_json(ctx);
-    ft_integrity_write(ctx);
-
-    fprintf(stderr, "\n[ForensicTrace] %d events written to %s (%ld bytes)\n",
-            ctx->count, ctx->output_path, ctx->storage_bytes);
-
-    ft_ctx_destroy(ctx);
+    ft_ctx_destroy(c);
     return 0;
 }

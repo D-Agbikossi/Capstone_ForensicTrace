@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Scenario 2: Privilege-related activity (read attempt + fake user record)
+set -e
 
-WORKDIR="$(mktemp -d)"
-trap 'rm -rf "$WORKDIR"' EXIT
-cd "$WORKDIR"
+WORKDIR="/tmp/ft_scenario02"
+rm -rf "$WORKDIR"; mkdir -p "$WORKDIR"; cd "$WORKDIR"
 
-FAKE="$WORKDIR/fake_passwd_entry"
+# Attempt to read a privileged file; will fail as non-root but still traced
+cat /etc/shadow > /dev/null 2>&1 || true
 
-python3 -c "open('/etc/shadow','rb').read(1)" 2>/dev/null || true
-echo "fake:x:1000:1000:Fake:/tmp:/bin/false" > "$FAKE"
-rm -f "$FAKE"
+# Simulated post-escalation activity
+echo "newuser:x:1001:1001::/home/newuser:/bin/sh" > fake_passwd_entry
+cat fake_passwd_entry
+rm -f fake_passwd_entry

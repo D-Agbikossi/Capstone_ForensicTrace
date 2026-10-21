@@ -1,3 +1,4 @@
+/* reconstructor.c — print human-readable incident timeline to stdout. */
 #include "forensictrace.h"
 
 #include <inttypes.h>
@@ -21,7 +22,7 @@ static const char *type_label(EventType t)
 void ft_reconstruct(FTContext *c)
 {
     uint64_t duration_ms;
-    uint64_t base_ts;
+    uint64_t base;
     int i;
 
     if (!c) {
@@ -43,36 +44,20 @@ void ft_reconstruct(FTContext *c)
         return;
     }
 
-    printf("#     Delta(ms)  Type      PID      PPID     Syscall      Target\n");
+    base = c->events[0].ts_ns;
+
+    printf("%-5s %-10s %-9s %-8s %-8s %-12s %s\n",
+           "#", "Delta(ms)", "Type", "PID", "PPID", "Syscall", "Target");
     printf("---------------------------------------------------------------------------------\n");
 
-    base_ts = c->events[0].ts_ns;
     for (i = 0; i < c->count; i++) {
-        double delta_ms = (double)(c->events[i].ts_ns - base_ts) / 1e6;
-        const Event *e = &c->events[i];
+        Event *e = &c->events[i];
+        double d = (double)(e->ts_ns - base) / 1e6;
+        const char *target = e->target[0] ? e->target : e->detail;
 
         printf("%-5d %-10.3f %-9s %-8d %-8d %-12s %s\n",
-               e->id,
-               delta_ms,
-               type_label(e->type),
-               (int)e->pid,
-               (int)e->ppid,
-               e->syscall,
-               e->target[0] ? e->target : e->detail);
+               e->id, d, type_label(e->type), (int)e->pid, (int)e->ppid,
+               e->syscall, target);
     }
     printf("---------------------------------------------------------------------------------\n");
-}
-
-const char *ft_event_type_str(EventType t)
-{
-    switch (t) {
-    case EV_PROCESS:
-        return "process";
-    case EV_FILE:
-        return "file";
-    case EV_NETWORK:
-        return "network";
-    default:
-        return "other";
-    }
 }

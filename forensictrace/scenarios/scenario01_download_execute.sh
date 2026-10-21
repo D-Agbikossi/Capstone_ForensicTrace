@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Scenario 1: Download -> chmod -> execute
+set -e
 
-WORKDIR="$(mktemp -d)"
-trap 'rm -rf "$WORKDIR"' EXIT
+WORKDIR="/tmp/ft_scenario01"
+rm -rf "$WORKDIR"; mkdir -p "$WORKDIR"; cd "$WORKDIR"
 
-cd "$WORKDIR"
-
-cat > payload.sh <<'PAYLOAD'
+cat > payload.sh <<'EOF'
 #!/bin/sh
-echo "scenario01 payload executed"
-PAYLOAD
+echo "payload executed at $(date)"
+sleep 0.2
+EOF
 
-python3 -m http.server 8765 >/dev/null 2>&1 &
-SERVER_PID=$!
-trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$WORKDIR"' EXIT
+python3 -m http.server 8765 --directory "$WORKDIR" >/dev/null 2>&1 &
+SERVER=$!
 sleep 0.5
 
-curl -sf -o downloaded.sh "http://127.0.0.1:8765/payload.sh"
+# Ground truth actions:
+curl -s -o downloaded.sh "http://127.0.0.1:8765/payload.sh"
 chmod +x downloaded.sh
 ./downloaded.sh
 
-kill "$SERVER_PID" 2>/dev/null || true
-wait "$SERVER_PID" 2>/dev/null || true
+kill $SERVER 2>/dev/null || true
+wait $SERVER 2>/dev/null || true

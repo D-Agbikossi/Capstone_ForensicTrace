@@ -1,3 +1,4 @@
+/* Legacy draft header — not used by Makefile build; see forensictrace.h. */
 #ifndef CORRELATOR_H
 #define CORRELATOR_H
 

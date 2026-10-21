@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-command lab setup for ForensicTrace (Ubuntu/Debian).
+# Install deps, build forensictrace, run tests/run_tests.sh (Ubuntu/Debian).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

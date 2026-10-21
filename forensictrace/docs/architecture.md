@@ -23,7 +23,7 @@ CLI (main.c)
 | `main.c` | Argument parsing, `FTContext` lifecycle, pipeline orchestration |
 | `collector.c` | Fork/exec tracee, syscall stops, classification, config filter |
 | `normaliser.c` | Placeholder for future path canonicalisation |
-| `correlator.c` | Links each event to prior same-PID event (window 200) |
+| `correlator.c` | Same-PID chain + cross-process link to parent fork/clone/execve |
 | `reconstructor.c` | Human-readable table on stdout |
 | `json_writer.c` | Experiment JSON schema |
 | `integrity.c` | OpenSSL SHA-256 sidecar in `sha256sum` format |
@@ -31,8 +31,9 @@ CLI (main.c)
 ## Data model
 
 In-memory `Event` records (see `forensictrace.h`) are appended during collection,
-then enriched with `parent_event` indices before export. One JSON file equals one
-experiment run.
+then enriched with `parent_event` indices before export. JSON includes `truncated`
+when the 20,000-event cap drops further syscalls. Output paths get parent
+directories created automatically; failed writes exit non-zero.
 
 ## Trust boundary
 

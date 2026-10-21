@@ -1,83 +1,139 @@
-# ForensicTrace — deployment and operation
+# ForensicTrace — deployment guide
 
-## Environment
+Follow these steps in order on **Ubuntu 22.04** or **Debian 12** (x86_64).
 
-- **OS:** Ubuntu 22.04 LTS or Debian 12 (x86_64)
-- **Packages:** `build-essential`, `libssl-dev`, `python3`, `curl`
-- **User:** Same UID as traced processes (child tracing via `fork` + `exec`)
+---
 
-Install dependencies (Debian/Ubuntu):
+## Step 1 — Get the code
+
+```bash
+git clone https://github.com/D-Agbikossi/Capstone_ForensicTrace.git
+cd Capstone_ForensicTrace/forensictrace
+```
+
+---
+
+## Step 2 — Install tools (one time)
 
 ```bash
 sudo apt update
 sudo apt install -y build-essential libssl-dev python3 curl
 ```
 
-## Build
+| Package | Why |
+|---------|-----|
+| `build-essential` | `gcc`, `make` |
+| `libssl-dev` | SHA-256 sidecar |
+| `python3` | Tests and `view_timeline.py` |
+| `curl` | Scenario scripts |
+
+---
+
+## Step 3 — Build and test
+
+**Option A — automatic (recommended)**
 
 ```bash
-git clone <repo>
-cd forensictrace
+bash scripts/setup.sh
+```
+
+You should see `Setup complete` and **16 tests passed**.
+
+**Option B — manual**
+
+```bash
 make clean && make
+chmod +x tests/run_tests.sh scenarios/*.sh scripts/*.sh
+./tests/run_tests.sh
 ```
 
-Verify no compiler warnings:
+Build uses **`Makefile`** in this folder (`make`). There is no `make install`.
+
+---
+
+## Step 4 — Run your first trace
 
 ```bash
-make clean && make 2>&1 | grep -i warning && exit 1 || echo OK
+./forensictrace --config B --output /tmp/run.json -- /bin/ls /tmp
 ```
 
-## Run a single experiment
+| Part | Meaning |
+|------|---------|
+| `--config B` | Process + **file** syscalls (use `A`, `C`, or `D` to change scope) |
+| `--output /tmp/run.json` | Where to save the experiment |
+| `--` | End of ForensicTrace options |
+| `/bin/ls /tmp` | Command to trace |
+
+You do **not** need `sudo` for normal runs.
+
+**Output**
+
+- **Terminal:** timeline table  
+- **Files:** `/tmp/run.json` and `/tmp/run.json.sha256`
+
+---
+
+## Step 5 — Check integrity and read the timeline
 
 ```bash
-./forensictrace --config B --output experiments/sample.json -- /bin/ls
+sha256sum -c /tmp/run.json.sha256
+python3 scripts/view_timeline.py /tmp/run.json
 ```
 
-Outputs:
+If verification prints `FAILED`, the JSON was changed after the run — capture again.
 
-1. Timeline on **stdout**
-2. Metadata on **stderr**
-3. JSON at `--output`
-4. Sidecar at `<output>.sha256`
+Each JSON file includes `"truncated": true` if the run hit the 20,000-event cap (extra events were dropped).
+Parent directories for `--output` are created automatically (e.g. `/tmp/my_run/out.json`).
 
-Verify integrity:
+---
+
+## Step 6 — Run a lab scenario (optional)
 
 ```bash
-sha256sum -c experiments/sample.json.sha256
+./forensictrace --config B --output /tmp/scenario4.json -- bash scenarios/scenario04_file_corruption.sh
+python3 scripts/view_timeline.py /tmp/scenario4.json
 ```
 
-## Batch experiments
+Other scripts: `scenarios/scenario01_download_execute.sh` (needs port **8765**), `scenario02_*`, `scenario03_*` (port **8766**).
+
+---
+
+## Step 7 — Record a demo (optional)
 
 ```bash
-chmod +x scripts/run_all_experiments.sh scenarios/*.sh
-./scripts/run_all_experiments.sh
+bash scripts/demo.sh
 ```
 
-Results land in `experiments/` with `manifest.csv`.
+See [VIDEO_DEMO_SCRIPT.md](../../VIDEO_DEMO_SCRIPT.md) at the repo root.
 
-## ptrace permissions
+---
 
-If collection records zero events and `PTRACE_TRACEME` fails with `EPERM`:
+## Config quick reference
 
-- Do not run under another tracer (`strace`, `gdb`) on the same process tree
-- Check YAMA: `cat /proc/sys/kernel/yama/ptrace_scope` (0 = permissive, 1 = restricted)
-- For lab VMs only, an admin may temporarily set `ptrace_scope=0`
+| Config | What is recorded |
+|--------|------------------|
+| **A** | Process only (`execve`, `fork`, `exit`, …) |
+| **B** | A + files (`open`, `read`, `write`, `unlink`, …) |
+| **C** | B + network (`connect`, …) |
+| **D** | All syscalls |
 
-ForensicTrace traces a **child** it creates; this works with `ptrace_scope=1` when
-the tracer is the parent.
-
-## Operational notes
-
-- One monitored host, one target command line per run
-- JSON files are the unit of analysis; copy with sidecars for archival
-- Re-run `sha256sum -c` after any file transfer to detect tampering
-- Scenario scripts use local HTTP ports **8765** and **8766**; ensure they are free
+---
 
 ## Troubleshooting
 
-| Symptom | Likely cause |
-|---------|----------------|
-| 0 events, exit 0 | Wrong `PTRACE_GETREGS` request or trace blocked |
-| Immediate exit 127 under `strace` | Nested tracer; test binary directly |
-| Scenario curl fails | Port in use or slow start; increase sleep in script |
-| `sha256sum` FAILED | JSON edited after run; re-run experiment |
+| Problem | Fix |
+|---------|-----|
+| `make` fails | Install `build-essential` and `libssl-dev` |
+| **0 events** | Do not run under `strace`, `gdb`, or the IDE debugger |
+| Tests fail on scenario 1 | Install `curl`; free port **8765** |
+| `PTRACE_TRACEME: Operation not permitted` | Close other tracers; trace only via `./forensictrace -- …` |
+
+---
+
+## Where files live
+
+| Item | Location |
+|------|----------|
+| Binary (after build) | `./forensictrace` (not committed to Git) |
+| Your traces | Any path you pass to `--output` (e.g. `/tmp/…`) |
+| Helper scripts | `scripts/setup.sh`, `scripts/demo.sh`, `scripts/view_timeline.py` |

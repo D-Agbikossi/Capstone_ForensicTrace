@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#define FT_MAX_EVENTS  20000
-#define FT_MAX_TRACEES 64
-#define FT_STR           512
+#define FT_MAX_EVENTS   20000
+#define FT_MAX_TRACEES  64
+#define FT_STR          512
 
 typedef enum {
     EV_PROCESS = 0,
@@ -22,38 +22,37 @@ typedef struct {
     char      syscall[32];
     pid_t     pid;
     pid_t     ppid;
-    int       dir;
-    long      ret;
+    int       dir;              /* 1 = entry, -1 = exit */
+    long      ret;              /* return value (exit only) */
     char      target[FT_STR];
     char      detail[FT_STR];
 } Event;
 
 typedef struct {
-    Event events[FT_MAX_EVENTS];
-    int   count;
-    int   parent_event[FT_MAX_EVENTS];
+    Event    events[FT_MAX_EVENTS];
+    int      count;
+    int      parent_event[FT_MAX_EVENTS];
 
-    char  config[8];
-    char  output_path[1024];
-    int   verbose;
+    char     config[8];
+    char     output_path[1024];
+    int      verbose;
 
     uint64_t start_ns;
     uint64_t end_ns;
     long     storage_bytes;
+    int      truncated;         /* 1 if events were dropped at FT_MAX_EVENTS */
 } FTContext;
 
-FTContext *ft_ctx_create(const char *config, const char *output, int verbose);
-void       ft_ctx_destroy(FTContext *c);
+int         ft_config_accepts(const char *config, const char *syscall_name);
 
-int  ft_collect(FTContext *c, char *const argv[]);
-void ft_normalize(FTContext *c);
-void ft_correlate(FTContext *c);
-void ft_reconstruct(FTContext *c);
-void ft_write_json(FTContext *c);
-void ft_integrity_write(FTContext *c);
+FTContext  *ft_ctx_create(const char *config, const char *output, int verbose);
+void        ft_ctx_destroy(FTContext *c);
+int         ft_collect(FTContext *c, char *const argv[]);
 
-int  ft_config_accepts(const char *config, const char *syscall_name);
-
-const char *ft_event_type_str(EventType t);
+void        ft_normalize(FTContext *c);
+void        ft_correlate(FTContext *c);
+void        ft_reconstruct(FTContext *c);
+int         ft_write_json(FTContext *c);
+int         ft_integrity_write(FTContext *c);
 
 #endif

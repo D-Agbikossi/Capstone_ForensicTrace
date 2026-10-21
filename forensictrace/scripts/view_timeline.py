@@ -1,43 +1,42 @@
 #!/usr/bin/env python3
-"""Render a ForensicTrace experiment JSON as a simple timeline."""
-
+"""View a ForensicTrace experiment JSON file as a timeline."""
 import json
 import sys
 
 
-def main() -> int:
-    if len(sys.argv) != 2:
-        print("Usage: view_timeline.py <experiment.json>", file=sys.stderr)
-        return 1
+def main(path):
+    with open(path) as f:
+        data = json.load(f)
 
-    with open(sys.argv[1], encoding="utf-8") as fh:
-        data = json.load(fh)
+    print("\n=== ForensicTrace Experiment ===")
+    print(f"Config      : {data.get('config')}")
+    print(f"Event count : {data.get('event_count')}")
+    print(f"Duration    : {data.get('duration_ns', 0) / 1e6:.3f} ms")
+    print("=================================\n")
 
     events = data.get("events", [])
-    config = data.get("config", "?")
-    duration_ns = data.get("duration_ns", 0)
-    duration_ms = duration_ns / 1e6 if duration_ns else 0.0
-
-    print("=== ForensicTrace JSON Timeline ===")
-    print(f"Config: {config} | Events: {len(events)} | Duration: {duration_ms:.3f} ms\n")
-
     if not events:
-        print("(no events)")
-        return 0
+        print("No events recorded.")
+        return
 
-    base = events[0].get("ts_ns", 0)
-    print(f"{'#':<5} {'Delta(ms)':<10} {'Type':<9} {'PID':<8} {'Syscall':<12} Target")
-    print("-" * 72)
-    for ev in events:
-        ts = ev.get("ts_ns", base)
-        delta = (ts - base) / 1e6
-        target = ev.get("target") or ev.get("detail") or ""
-        print(
-            f"{ev.get('id', 0):<5} {delta:<10.3f} {ev.get('type', ''):<9} "
-            f"{ev.get('pid', 0):<8} {ev.get('syscall', ''):<12} {target}"
-        )
-    return 0
+    base = events[0]["ts_ns"]
+
+    print(f"{'#':<5} {'Delta(ms)':<10} {'Type':<9} "
+          f"{'PID':<8} {'PPID':<8} {'Syscall':<12} Target")
+    print("-" * 90)
+
+    for e in events:
+        delta = (e["ts_ns"] - base) / 1e6
+        print(f"{e['id']:<5} {delta:<10.3f} {e['type']:<9} "
+              f"{e['pid']:<8} {e['ppid']:<8} {e['syscall']:<12} "
+              f"{e.get('target','')}")
+
+    print("-" * 90)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <experiment.json>")
+        sys.exit(1)
+    main(sys.argv[1])
+    

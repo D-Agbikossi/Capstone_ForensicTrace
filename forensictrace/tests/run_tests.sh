@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ForensicTrace MVP acceptance tests. Exit 0 if all pass.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -40,6 +41,7 @@ PY
 
 echo "=== ForensicTrace test suite ==="
 
+# --- 1–3: build, CLI, validation ---
 # 1 Build
 BUILD_LOG="$TMP/build.log"
 if ! make clean >/dev/null 2>&1 || ! make >"$BUILD_LOG" 2>&1; then
@@ -67,6 +69,7 @@ else
   pass "invalid config rejected"
 fi
 
+# --- 4–8: evidence configurations A–D ---
 # 4 Config A valid JSON
 "$BIN" --config A --output "$TMP/a.json" -- /bin/true >/dev/null 2>&1
 if python3 -c "import json; json.load(open('$TMP/a.json'))"; then
@@ -115,6 +118,7 @@ else
   fail "Config D > Config A ($cd vs $ca)"
 fi
 
+# --- 9–12: correlation, integrity, helpers ---
 # 9 Correlation links events
 if [[ "$(parent_linked "$TMP/b.json")" -eq 1 ]]; then
   pass "Correlation links events"
@@ -145,6 +149,7 @@ else
   fail "Timeline viewer runs"
 fi
 
+# --- 13: controlled scenario under ptrace ---
 # 13 Scenario 1 end-to-end
 if [[ -x "$ROOT/scenarios/scenario01_download_execute.sh" ]]; then
   SC_OUT="$TMP/scenario01.json"
@@ -167,6 +172,51 @@ PY
   fi
 else
   fail "Scenario 1 script missing"
+fi
+
+# --- 14–16: output path, truncated flag, cross-process correlation ---
+# 14 Nested output directory (mkdir -p + non-empty JSON)
+NEST="$TMP/nested/out.json"
+rm -rf "$TMP/nested"
+"$BIN" --config A --output "$NEST" -- /bin/echo hi >/dev/null 2>&1
+if [[ -f "$NEST" ]] && [[ "$(stat -c%s "$NEST" 2>/dev/null || echo 0)" -gt 0 ]]; then
+  pass "Output creates nested directory"
+else
+  fail "Output creates nested directory"
+fi
+
+# 15 truncated field in JSON schema
+if python3 - "$NEST" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert "truncated" in d
+assert d["truncated"] is False
+PY
+then
+  pass "JSON includes truncated flag"
+else
+  fail "JSON includes truncated flag"
+fi
+
+# 16 Cross-process parent_event (child PID linked to parent clone/fork)
+"$BIN" --config A --output "$TMP/fork.json" -- /bin/sh -c '/bin/true & wait' >/dev/null 2>&1
+if python3 - "$TMP/fork.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+events = d["events"]
+for i, e in enumerate(events):
+    pe = e.get("parent_event", -1)
+    if pe < 0:
+        continue
+    parent = events[pe]
+    if parent["pid"] != e["pid"]:
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+then
+  pass "Cross-process correlation"
+else
+  fail "Cross-process correlation"
 fi
 
 echo "=== Results: $PASS passed, $FAIL failed ==="

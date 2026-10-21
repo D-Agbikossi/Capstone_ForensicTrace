@@ -1,3 +1,4 @@
+/* Legacy draft header — not used by Makefile build; see forensictrace.h. */
 #ifndef RECONSTRUCTOR_H
 #define RECONSTRUCTOR_H
 

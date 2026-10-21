@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot event counts by type from a ForensicTrace JSON experiment."""
+"""Summarise event counts by type; optional PNG bar chart (needs matplotlib)."""
 
 from __future__ import annotations
 

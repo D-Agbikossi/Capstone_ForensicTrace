@@ -12,7 +12,7 @@ forensictrace/
 ├── src/                   Implementation by module
 ├── tests/run_tests.sh     Quality gate / smoke test
 ├── scenarios/             Incident demos (01–04)
-├── scripts/               setup, batch runs, viewers
+├── scripts/               setup, demo, viewers
 └── docs/                  Architecture, deployment, designs, examples
 ```
 
@@ -63,7 +63,6 @@ Empty capture → explicit `(no events captured)` (no blank confusion).
 |------|-------|----------------|
 | `scripts/view_timeline.py` | JSON file | Condensed timeline text |
 | `scripts/visualize_events.py` | JSON file | Counts by type (+ optional PNG) |
-| `scripts/run_all_experiments.sh` | — | `experiments/manifest.csv` index |
 
 ## 5. Evidence configurations (mental model)
 
